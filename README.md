@@ -20,15 +20,15 @@ Using **lazy.nvim**:
 
 ```lua
 {
-    "egordebug/ApkDexEditor.nvim",
-    dependencies = {
+        "egordebug/ApkDexEditor.nvim",
+        dependencies = {
         "nvim-neo-tree/neo-tree.nvim",
         "nvim-lua/plenary.nvim",
     },
     config = function()
-        require("apk-editor").setup()
-    end,
-}
+        require("apkdexeditor").setup()
+    end
+    }
 ```
 
 ## Main Commands
