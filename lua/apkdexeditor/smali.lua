@@ -11,7 +11,7 @@ local function open_tree(path)
 end
 
 local function close_session()
-    if _G.ADE_State.SmaliSession.root ~= "" then
+    if _G.ADE_State.SmaliSession and _G.ADE_State.SmaliSession.root ~= "" then
         pcall(function()
             if vim.fn.exists(':Neotree') > 0 then vim.cmd("Neotree close") end
             local base_dir = _G.ADE_State.SmaliSession.root:gsub("/out$", "")
@@ -25,30 +25,40 @@ end
 
 local function handle_smali_engine(engine_type, args)
     if #args == 0 then
-        vim.notify("Usage: :" .. engine_type .. "2Smali <file|Compile|Back|Search|SearchFile>", vim.log.levels.ERROR)
+        vim.notify("Usage: :" .. engine_type .. "2Smali <file|Compile|Back|List|Search|SearchFile>", vim.log.levels.ERROR)
         return
     end
 
     local arg1 = args[1]
     local ext = engine_type:lower()
 
-    if arg1 == "Compile" or arg1 == "Back" or arg1 == "Search" or arg1 == "SearchFile" then
-        if _G.ADE_State.SmaliSession.root == "" then
-            vim.notify("No active Smali session! Open a file first.", vim.log.levels.ERROR)
+    if arg1 == "Compile" or arg1 == "Back" or arg1 == "List" or arg1 == "Search" or arg1 == "SearchFile" then
+        if not _G.ADE_State.SmaliSession or _G.ADE_State.SmaliSession.root == "" then
+            vim.notify("No active Smali session!", vim.log.levels.ERROR)
             return
         end
 
         if arg1 == "Back" then
             close_session()
-            vim.cmd("cd " .. vim.fn.shellescape(_G.ADE_State.MainProjectPath))
-            vim.notify("Returned to " .. _G.ADE_State.MainProjectPath)
+            if _G.ADE_State.MainProjectPath then
+                vim.cmd("cd " .. vim.fn.shellescape(_G.ADE_State.MainProjectPath))
+            end
+            vim.notify("Session closed.")
+            return
+
+        elseif arg1 == "List" then
+            local root = _G.ADE_State.SmaliSession.root
+            vim.cmd("cd " .. vim.fn.shellescape(root))
+            open_tree(root)
             return
 
         elseif arg1 == "Compile" then
-            local tmp_dir = _G.ADE_State.SmaliSession.root:gsub("/out$", "")
-            local orig_file = _G.ADE_State.SmaliSession.original_file
+            local session = _G.ADE_State.SmaliSession
+            local tmp_dir = session.root:gsub("/out$", "")
+            local orig_file = session.original_file
             
-            if not misc.exec_log(string.format("java -jar %s a %s/out -o %s/classes.dex", misc.jars.smali, tmp_dir, tmp_dir), "Smali Compilation") then return end
+            local smali_cmd = string.format("java -jar %s a %s/out -o %s/classes.dex", misc.jars.smali, tmp_dir, tmp_dir)
+            if not misc.exec_log(smali_cmd, "Smali Compilation") then return end
             
             local backup_file = orig_file .. ".bak"
             if vim.fn.filereadable(backup_file) == 0 then
@@ -62,29 +72,22 @@ local function handle_smali_engine(engine_type, args)
             elseif engine_type == "Class" then
                 misc.exec_log(string.format('dex2jar %s/classes.dex -o %s', tmp_dir, vim.fn.shellescape(orig_file)), "Dex2Jar")
             elseif engine_type == "Java" then
-                vim.notify("Java files cannot be cleanly recompiled from smali directly without full build system.", vim.log.levels.WARN)
+                vim.notify("Java files cannot be fully recompiled to .java from smali.", vim.log.levels.WARN)
             end
-            vim.notify("Compiled successfully. Replaced " .. orig_file, vim.log.levels.INFO)
+            vim.notify("Replaced: " .. orig_file, vim.log.levels.INFO)
             return
 
         elseif arg1 == "Search" then
-            if not args[2] then vim.notify("Provide search query", vim.log.levels.ERROR); return end
-            pcall(vim.cmd, string.format("vimgrep /%s/j %s/**/*.smali", args[2], _G.ADE_State.SmaliSession.root))
+            if not args[2] then vim.notify("Query required", vim.log.levels.ERROR); return end
+            vim.cmd(string.format("silent! vimgrep /%s/j %s/**/*.smali", args[2], _G.ADE_State.SmaliSession.root))
             vim.cmd("copen")
-            return
-
-        elseif arg1 == "SearchFile" then
-            if not args[2] then vim.notify("Provide filename", vim.log.levels.ERROR); return end
-            local find_cmd = string.format("find %s -name '%s'", _G.ADE_State.SmaliSession.root, args[2])
-            local res = vim.fn.system(find_cmd)
-            if res ~= "" then print("Found:\n" .. res) else print("Not found.") end
             return
         end
     end
 
     local target_file = vim.fn.expand(arg1)
-    if vim.fn.filereadable(target_file) == 0 or not target_file:match("%." .. ext .. "$") then
-        vim.notify("Incorrect filename or argument. Expected ." .. ext, vim.log.levels.ERROR)
+    if vim.fn.filereadable(target_file) == 0 then
+        vim.notify("File not found: " .. target_file, vim.log.levels.ERROR)
         return
     end
 
@@ -98,7 +101,7 @@ local function handle_smali_engine(engine_type, args)
 
     if ext == "java" then
         local android_jar = misc.jars.android_jar
-        misc.exec_log(string.format('javac -cp .:%s %s -d %s', android_jar, vim.fn.shellescape(target_file), tmp_dir), "Javac")
+        if not misc.exec_log(string.format('javac -cp .:%s %s -d %s', android_jar, vim.fn.shellescape(target_file), tmp_dir), "Javac") then return end
         misc.exec_log(string.format('d8 %s/*.class --lib %s --output %s', tmp_dir, android_jar, tmp_dir), "D8")
     elseif ext == "class" then
         misc.exec_log(string.format('d8 %s --output %s', vim.fn.shellescape(target_file), tmp_dir), "D8")
@@ -106,16 +109,18 @@ local function handle_smali_engine(engine_type, args)
         os.execute(string.format('cp %s %s/classes.dex', vim.fn.shellescape(target_file), tmp_dir))
     end
 
-    if misc.exec_log(string.format('java -jar %s d %s/classes.dex -o %s/out', misc.jars.baksmali, tmp_dir, tmp_dir), "Baksmali") then
+    local baksmali_cmd = string.format('java -jar %s d %s/classes.dex -o %s/out', misc.jars.baksmali, tmp_dir, tmp_dir)
+    if misc.exec_log(baksmali_cmd, "Baksmali") then
         vim.cmd("cd " .. _G.ADE_State.SmaliSession.root)
         open_tree(_G.ADE_State.SmaliSession.root)
     end
 end
 
 function M.setup_commands()
-    vim.api.nvim_create_user_command('Dex2Smali', function(opts) handle_smali_engine("Dex", opts.fargs) end, { nargs = '+' })
-    vim.api.nvim_create_user_command('Class2Smali', function(opts) handle_smali_engine("Class", opts.fargs) end, { nargs = '+' })
-    vim.api.nvim_create_user_command('Java2Smali', function(opts) handle_smali_engine("Java", opts.fargs) end, { nargs = '+' })
+    local opts = { nargs = '+', complete = function() return {"Compile", "Back", "List", "Search"} end }
+    vim.api.nvim_create_user_command('Dex2Smali', function(o) handle_smali_engine("Dex", o.fargs) end, opts)
+    vim.api.nvim_create_user_command('Class2Smali', function(o) handle_smali_engine("Class", o.fargs) end, opts)
+    vim.api.nvim_create_user_command('Java2Smali', function(o) handle_smali_engine("Java", o.fargs) end, opts)
 end
 
 return M
