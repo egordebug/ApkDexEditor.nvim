@@ -1,0 +1,107 @@
+1. :ApkOpen DexEditor <action> [arguments]
+   Main entry point for APK editing session.
+
+   Possible actions / subcommands:
+
+   :ApkOpen DexEditor <path-to-apk-file>
+       → Decodes selected APK using apktool → opens smali structure
+       Example:
+       :ApkOpen DexEditor ~/Downloads/example.apk
+
+   :ApkOpen DexEditor Compile
+       → Recompiles all smali folders back to .dex files
+       → Updates original APK (creates .bak if missing)
+       Example:
+       :ApkOpen DexEditor Compile
+
+   :ApkOpen DexEditor Back
+       → Closes current APK session
+       → Deletes temporary decoded folder
+       → Returns to original working directory
+       Example:
+       :ApkOpen DexEditor Back
+
+   :ApkOpen DexEditor List
+       → Shows list of decoded DEX folders (classes, smali_classes2, etc.)
+       → Lets you select one → changes cwd + opens Neotree/Explorer there
+       Example:
+       :ApkOpen DexEditor List
+
+2. :Dex2Smali <action-or-file>
+   :Class2Smali <action-or-file>
+   :Java2Smali <action-or-file>
+   (three similar commands with slightly different input types)
+
+   Common subcommands:
+
+   :Dex2Smali <path-to-classes.dex / .dex file>
+       → Disassembles DEX → opens smali folder in Neotree/Explorer
+
+   :Class2Smali <path-to-YourClass.class>
+       → Converts .class → DEX (d8) → disassembles to smali
+
+   :Java2Smali <path-to-YourFile.java>
+       → Compiles .java (javac + d8) → disassembles to smali
+       (Note: Android API stubs required)
+
+   Common actions (work in any active smali session):
+
+   :Dex2Smali Compile
+   :Class2Smali Compile
+   :Java2Smali Compile
+       → Recompiles current smali folder back to original format
+       → For Dex   → replaces original .dex
+       → For Class → produces new .class via dex2jar (approximate)
+       → For Java  → shows warning (not fully reversible)
+
+   :Dex2Smali Back    (same for Class2Smali / Java2Smali)
+       → Closes smali session, deletes temp folder, returns to original cwd
+
+   :Dex2Smali List    (same for others)
+       → Opens file explorer (Neotree or netrw) at smali root
+
+   :Dex2Smali Search <pattern>
+       → Runs :vimgrep /pattern/ **/*.smali
+       → Opens quickfix list
+
+   :Dex2Smali SearchFile <pattern>
+       (not implemented in shown code — possibly planned / typo)
+
+3. :AdbInstall [optional-apk-path]
+   Installs APK on connected device via adb
+
+   Examples:
+   :AdbInstall
+       → installs current session APK (_G.ADE_State.ApkSession.original_apk)
+
+   :AdbInstall ~/my-mod.apk
+       → installs specified file
+
+4. :AdbPush <local-file> [remote-path]
+   Pushes file to device via adb
+
+   Examples:
+   :AdbPush ./modded.apk
+       → pushes to default /data/local/tmp/
+
+   :AdbPush ./script.sh /sdcard/Download/
+
+5. <C-t>   (normal & terminal mode)
+   Toggles floating terminal window
+   Automatically cds into current APK/smali session folder if active
+
+Summary – most common workflow:
+
+1. :ApkOpen DexEditor myapp.apk
+2. Edit smali files (or :ApkOpen DexEditor List → switch DEX)
+3. :ApkOpen DexEditor Compile
+4. :AdbInstall
+5. Test on device
+6. :ApkOpen DexEditor Back   (when finished)
+
+Single-file quick edit example:
+
+:Dex2Smali classes.dex
+... edit smali ...
+:Dex2Smali Compile
+:AdbPush classes.dex /sdcard/
