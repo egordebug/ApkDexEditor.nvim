@@ -19,7 +19,7 @@ Allows decompiling APK, working with Dalvik/ART bytecode (smali), .class files a
 Using **lazy.nvim**:
 
 ```lua
-{
+    {
         "egordebug/ApkDexEditor.nvim",
         dependencies = {
         "nvim-neo-tree/neo-tree.nvim",
