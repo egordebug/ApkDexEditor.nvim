@@ -1,5 +1,27 @@
 local M = {}
 local misc = require('apkdexeditor.misc')
+local state_file = vim.fn.stdpath('data') .. '/ade_smali_session.txt'
+
+local function cleanup_temp_data(root_path)
+    if root_path and root_path ~= "" then
+        local base_dir = root_path:gsub("/out$", "")
+        if vim.fn.isdirectory(base_dir) == 1 then
+            os.execute("rm -rf " .. vim.fn.shellescape(base_dir))
+        end
+    end
+    os.remove(state_file)
+end
+
+local function save_session()
+    local s = _G.ADE_State.SmaliSession
+    if s and s.root ~= "" and s.type == "dex" then
+        local f = io.open(state_file, "w")
+        if f then
+            f:write(string.format("%s\n%s\n%s", s.root, s.original_file, s.type))
+            f:close()
+        end
+    end
+end
 
 local function open_tree(path)
     if vim.fn.exists(':Neotree') > 0 then
@@ -14,13 +36,45 @@ local function close_session()
     if _G.ADE_State.SmaliSession and _G.ADE_State.SmaliSession.root ~= "" then
         pcall(function()
             if vim.fn.exists(':Neotree') > 0 then vim.cmd("Neotree close") end
-            local base_dir = _G.ADE_State.SmaliSession.root:gsub("/out$", "")
-            if vim.fn.isdirectory(base_dir) == 1 then
-                os.execute("rm -rf " .. vim.fn.shellescape(base_dir))
-            end
+            cleanup_temp_data(_G.ADE_State.SmaliSession.root)
         end)
         _G.ADE_State.SmaliSession = { root = "", original_file = "", type = "" }
     end
+end
+
+function M.check_active_session()
+    local f = io.open(state_file, "r")
+    if not f then return end
+
+    local lines = {}
+    for line in f:lines() do table.insert(lines, line) end
+    f:close()
+
+    local root = lines[1]
+    if not root or vim.fn.isdirectory(root) == 0 then
+        os.remove(state_file)
+        return
+    end
+
+    vim.schedule(function()
+        vim.ui.select({ "Restore DEX Session", "Ignore", "Delete Session" }, {
+            prompt = "Active Dex2Smali session detected:",
+        }, function(choice)
+            if choice == "Restore DEX Session" then
+                _G.ADE_State.SmaliSession = { 
+                    root = root, 
+                    original_file = lines[2] or "", 
+                    type = lines[3] or "dex" 
+                }
+                vim.cmd("cd " .. vim.fn.shellescape(root))
+                vim.notify("DEX Session restored", vim.log.levels.INFO)
+            elseif choice == "Delete Session" then
+                cleanup_temp_data(root)
+                _G.ADE_State.SmaliSession = { root = "", original_file = "", type = "" }
+                vim.notify("Temporary files deleted", vim.log.levels.WARN)
+            end
+        end)
+    end)
 end
 
 local function handle_smali_engine(engine_type, args)
@@ -111,6 +165,7 @@ local function handle_smali_engine(engine_type, args)
 
     local baksmali_cmd = string.format('java -jar %s d %s/classes.dex -o %s/out', misc.jars.baksmali, tmp_dir, tmp_dir)
     if misc.exec_log(baksmali_cmd, "Baksmali") then
+        save_session()
         vim.cmd("cd " .. _G.ADE_State.SmaliSession.root)
         open_tree(_G.ADE_State.SmaliSession.root)
     end

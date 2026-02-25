@@ -1,107 +1,102 @@
-1. :ApkOpen DexEditor <action> [arguments]
-   Main entry point for APK editing session.
+session files:
+  ~/.local/share/nvim/ade_session.txt     (for APK)
+  ~/.local/share/nvim/ade_smali_session.txt (for Dex/Class/Java → smali)
 
-   Possible actions / subcommands:
+1. :ApkOpen DexEditor <action-or-apk-path>
 
-   :ApkOpen DexEditor <path-to-apk-file>
-       → Decodes selected APK using apktool → opens smali structure
-       Example:
-       :ApkOpen DexEditor ~/Downloads/example.apk
+   :ApkOpen DexEditor ~/myapp.apk
+       → decode APK with apktool -f
+       → save session
+       → auto run :ApkOpen DexEditor List
 
    :ApkOpen DexEditor Compile
-       → Recompiles all smali folders back to .dex files
-       → Updates original APK (creates .bak if missing)
-       Example:
-       :ApkOpen DexEditor Compile
+       → (re)compile ALL smali* folders → classes.dex / classes2.dex / ...
+       → create mod_work.apk → inject all .dex → replace original APK
+       → keep original as .bak if not exists
+       → notify success
 
    :ApkOpen DexEditor Back
-       → Closes current APK session
-       → Deletes temporary decoded folder
-       → Returns to original working directory
-       Example:
-       :ApkOpen DexEditor Back
+       → close session
+       → rm -rf temp folder
+       → remove state file
+       → cd back to _G.ADE_State.MainProjectPath (if set)
+       → notify "APK session closed"
 
    :ApkOpen DexEditor List
-       → Shows list of decoded DEX folders (classes, smali_classes2, etc.)
-       → Lets you select one → changes cwd + opens Neotree/Explorer there
-       Example:
-       :ApkOpen DexEditor List
+       → show UI select with all smali* folders (smali, smali_classes2, ...)
+       → on choice: set target_dex, save session, cd into folder
+       → reopen Neotree float on that folder (or netrw if no neo-tree)
 
-2. :Dex2Smali <action-or-file>
-   :Class2Smali <action-or-file>
-   :Java2Smali <action-or-file>
-   (three similar commands with slightly different input types)
+2. Single-file smali workflows
 
-   Common subcommands:
+   :Dex2Smali <path-to.dex>
+   :Class2Smali <path-to.class>
+   :Java2Smali <path-to.java>
 
-   :Dex2Smali <path-to-classes.dex / .dex file>
-       → Disassembles DEX → opens smali folder in Neotree/Explorer
+       → close previous session
+       → create temp dir
+       → convert to DEX if needed (javac+d8 / d8 / copy)
+       → baksmali → /out folder
+       → save session (only for Dex type currently)
+       → cd + open Neotree/Explore on smali root
 
-   :Class2Smali <path-to-YourClass.class>
-       → Converts .class → DEX (d8) → disassembles to smali
+   Common subcommands (when session active):
 
-   :Java2Smali <path-to-YourFile.java>
-       → Compiles .java (javac + d8) → disassembles to smali
-       (Note: Android API stubs required)
+   :Dex2Smali Compile    (also Class2Smali Compile, Java2Smali Compile)
+       → smali → classes.dex
+       → for Dex   → copy back to original .dex
+       → for Class → dex2jar → .class (approximate!)
+       → for Java  → warning: impossible to fully reverse to source
 
-   Common actions (work in any active smali session):
+   :Dex2Smali Back       (same for Class2Smali / Java2Smali)
+       → close session
+       → rm -rf temp dir (base dir, not only /out)
+       → remove state file
+       → cd back to MainProjectPath
 
-   :Dex2Smali Compile
-   :Class2Smali Compile
-   :Java2Smali Compile
-       → Recompiles current smali folder back to original format
-       → For Dex   → replaces original .dex
-       → For Class → produces new .class via dex2jar (approximate)
-       → For Java  → shows warning (not fully reversible)
-
-   :Dex2Smali Back    (same for Class2Smali / Java2Smali)
-       → Closes smali session, deletes temp folder, returns to original cwd
-
-   :Dex2Smali List    (same for others)
-       → Opens file explorer (Neotree or netrw) at smali root
+   :Dex2Smali List       (same for others)
+       → cd to smali root
+       → open Neotree float or netrw
 
    :Dex2Smali Search <pattern>
-       → Runs :vimgrep /pattern/ **/*.smali
-       → Opens quickfix list
+       → :vimgrep /pattern/j **/*.smali
+       → :copen quickfix
 
-   :Dex2Smali SearchFile <pattern>
-       (not implemented in shown code — possibly planned / typo)
+   :Dex2Smali SearchFile <pattern>   → not implemented yet
 
-3. :AdbInstall [optional-apk-path]
-   Installs APK on connected device via adb
+3. ADB helpers
 
-   Examples:
-   :AdbInstall
-       → installs current session APK (_G.ADE_State.ApkSession.original_apk)
+   :AdbInstall [optional-apk]
+       → default: install current session APK
+       → or specified file
+       → uses adb install -r
 
-   :AdbInstall ~/my-mod.apk
-       → installs specified file
+   :AdbPush <local-file> [remote-path]
+       → default remote: /data/local/tmp/
+       → adb push ...
 
-4. :AdbPush <local-file> [remote-path]
-   Pushes file to device via adb
+4. Terminal
 
-   Examples:
-   :AdbPush ./modded.apk
-       → pushes to default /data/local/tmp/
+   <C-t>    (normal & terminal mode)
+       → toggle floating terminal (80% size)
+       → auto cd into active session folder (APK root or smali root)
+       → starts sh/zsh/bash
 
-   :AdbPush ./script.sh /sdcard/Download/
 
-5. <C-t>   (normal & terminal mode)
-   Toggles floating terminal window
-   Automatically cds into current APK/smali session folder if active
+Examples:
 
-Summary – most common workflow:
+Full APK edit:
+1. :ApkOpen DexEditor ~/modifications/modded.apk
+2. Edit smali_classes2/**/...
+3. :ApkOpen DexEditor List -> switch to another DEX
+4. :ApkOpen DexEditor Compile
+5. :AdbInstall
+6. :ApkOpen DexEditor Back
 
-1. :ApkOpen DexEditor myapp.apk
-2. Edit smali files (or :ApkOpen DexEditor List → switch DEX)
-3. :ApkOpen DexEditor Compile
-4. :AdbInstall
-5. Test on device
-6. :ApkOpen DexEditor Back   (when finished)
+Quick single dex patch:
+1. :Dex2Smali classes.dex
+2. Edit ...
+3. :Dex2Smali Compile
 
-Single-file quick edit example:
-
-:Dex2Smali classes.dex
-... edit smali ...
-:Dex2Smali Compile
-:AdbPush classes.dex /sdcard/
+Session auto-restore:
+• Quit Neovim during edit → reopen → see prompt to restore / delete

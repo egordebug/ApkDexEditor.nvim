@@ -1,15 +1,67 @@
 local M = {}
 local misc = require('apkdexeditor.misc')
+local state_file = vim.fn.stdpath('data') .. '/ade_session.txt'
+
+local function save_apk_session()
+    local session = _G.ADE_State.ApkSession
+    if session and session.root ~= "" then
+        local f = io.open(state_file, "w")
+        if f then
+            f:write(session.root .. "\n" .. session.original_apk .. "\n" .. (session.target_dex or ""))
+            f:close()
+        end
+    end
+end
+local function cleanup_temp_data(root_path)
+    if root_path and root_path ~= "" and vim.fn.isdirectory(root_path) == 1 then
+        os.execute("rm -rf " .. vim.fn.shellescape(root_path))
+    end
+    os.remove(state_file)
+end
 
 local function close_apk_session()
     if _G.ADE_State.ApkSession.root ~= "" then
         if vim.fn.exists(':Neotree') > 0 then vim.cmd("Neotree close") end
-        if vim.fn.isdirectory(_G.ADE_State.ApkSession.root) == 1 then
-            os.execute("rm -rf " .. vim.fn.shellescape(_G.ADE_State.ApkSession.root))
-        end
+        cleanup_temp_data(_G.ADE_State.ApkSession.root)
         _G.ADE_State.ApkSession = { root = "", target_dex = "", original_apk = "" }
     end
 end
+
+function M.check_active_session()
+    local f = io.open(state_file, "r")
+    if not f then return end
+
+    local lines = {}
+    for line in f:lines() do table.insert(lines, line) end
+    f:close()
+
+    local root = lines[1]
+    if not root or vim.fn.isdirectory(root) == 0 then
+        os.remove(state_file)
+        return
+    end
+
+    vim.schedule(function()
+        vim.ui.select({ "Restore Session", "Ignore", "Delete Session" }, {
+            prompt = "Active APK session detected:",
+        }, function(choice)
+            if choice == "Restore Session" then
+                _G.ADE_State.ApkSession = { 
+                    root = root, 
+                    original_apk = lines[2] or "", 
+                    target_dex = lines[3] or "" 
+                }
+                vim.cmd("cd " .. vim.fn.shellescape(root))
+                vim.notify("Session restored", vim.log.levels.INFO)
+            elseif choice == "Delete Session" then
+                cleanup_temp_data(root)
+                _G.ADE_State.ApkSession = { root = "", target_dex = "", original_apk = "" }
+                vim.notify("Session and temporary files deleted", vim.log.levels.WARN)
+            end
+        end)
+    end)
+end
+
 
 function M.setup_commands()
     vim.api.nvim_create_user_command('ApkOpen', function(opts)
@@ -78,6 +130,7 @@ function M.setup_commands()
             
             vim.notify("APK Compiled (All DEX) successfully!", vim.log.levels.INFO)
             return
+
         elseif action == "List" then
             local root = _G.ADE_State.ApkSession.root
             if root == "" then vim.notify("No APK session!", vim.log.levels.ERROR); return end
@@ -90,6 +143,7 @@ function M.setup_commands()
             vim.ui.select(dex_folders, { prompt = 'Switch to DEX folder:' }, function(choice)
                 if choice then
                     _G.ADE_State.ApkSession.target_dex = choice
+                    save_apk_session()
                     vim.cmd("cd " .. root .. "/" .. choice)
                     if vim.fn.exists(':Neotree') > 0 then 
                         vim.cmd("Neotree close")
@@ -99,6 +153,7 @@ function M.setup_commands()
             end)
             return
         end
+
         local apk = vim.fn.expand(action)
         if vim.fn.filereadable(apk) == 0 then vim.notify("APK not found!", vim.log.levels.ERROR); return end
 
@@ -108,6 +163,7 @@ function M.setup_commands()
         _G.ADE_State.ApkSession.root = base_dir
 
         if misc.exec_log("apktool d -f " .. vim.fn.shellescape(apk) .. " -o " .. vim.fn.shellescape(base_dir), "APKtool Decode") then
+            save_apk_session()
             vim.cmd("ApkOpen DexEditor List")
         end
     end, { 
@@ -115,3 +171,5 @@ function M.setup_commands()
         complete = function() return {"DexEditor"} end
     })
 end
+
+return M
