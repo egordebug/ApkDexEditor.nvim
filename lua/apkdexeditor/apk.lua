@@ -1,5 +1,5 @@
 local M = {}
-local misc = require('apk-editor.misc')
+local misc = require('apkdexeditor.misc')
 
 local function close_apk_session()
     if _G.ADE_State.ApkSession.root ~= "" then

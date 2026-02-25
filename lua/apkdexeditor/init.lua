@@ -1,10 +1,10 @@
 local M = {}
 
 function M.setup(opts)
-    require('apk-editor.misc')
-    require('apk-editor.smali').setup_commands()
-    require('apk-editor.apk').setup_commands()
-    require('apk-editor.keybinds').setup()
+    require('apkdexeditor.misc')
+    require('apkdexeditor.smali').setup_commands()
+    require('apkdexeditor.apk').setup_commands()
+    require('apkdexeditor.keybinds').setup()
 end
 
 return M

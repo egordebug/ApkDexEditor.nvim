@@ -1,5 +1,5 @@
 local M = {}
-local term = require('apk-editor.term')
+local term = require('apkdexeditor.term')
 
 function M.setup()
     vim.keymap.set({ "n", "t" }, "<C-t>", term.toggle_terminal, { desc = "Toggle Terminal" })

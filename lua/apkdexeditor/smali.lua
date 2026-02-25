@@ -1,5 +1,5 @@
 local M = {}
-local misc = require('apk-editor.misc')
+local misc = require('apkdexeditor.misc')
 
 local function open_tree(path)
     if vim.fn.exists(':Neotree') > 0 then
