@@ -24,7 +24,7 @@ Using **lazy.nvim**:
         dependencies = {
         "nvim-neo-tree/neo-tree.nvim",
         "nvim-lua/plenary.nvim",
-    },
+        }
     config = function()
         require("apkdexeditor").setup()
     end
