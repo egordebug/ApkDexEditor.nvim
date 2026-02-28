@@ -242,8 +242,9 @@ function M.setup_commands()
         close_apk_session()
         local base_dir = misc.get_tmp_dir("apk_project")
         
-        show_progress("Decoding APK...", 0, 0)
+                show_progress("Decoding APK...", 0, 0)
         local cmd = "apktool d -f " .. vim.fn.shellescape(apk) .. " -o " .. vim.fn.shellescape(base_dir)
+        
         vim.fn.jobstart(cmd, {
             on_exit = function(_, code)
                 close_progress()
@@ -251,15 +252,19 @@ function M.setup_commands()
                     _G.ADE_State.ApkSession.original_apk = vim.fn.fnamemodify(apk, ":p")
                     _G.ADE_State.ApkSession.root = base_dir
                     save_apk_session()
-                    
                     vim.schedule(function()
-                        vim.cmd("ApkOpen DexEditor List")
+                        vim.api.nvim_set_current_dir(base_dir)
+                        if vim.fn.exists(':Neotree') > 0 then
+                            vim.cmd("Neotree show")
+                        end
+                        M.show_dex_list(base_dir)
                     end)
                 else
                     vim.notify("APKtool Decode failed!", vim.log.levels.ERROR)
                 end
             end
         })
+
 
     end, { 
         nargs = '+',
